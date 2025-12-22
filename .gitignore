@@ -1,0 +1,9 @@
+input
+result
+work
+
+*csv
+*pyc
+*_vm.*
+.nextflow*
+*DS_Store
