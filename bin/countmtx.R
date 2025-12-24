@@ -9,8 +9,14 @@ args <- commandArgs(trailingOnly=TRUE)
 allpaths <- Sys.glob(args)
 
 countmat <- lapply(allpaths, function(path){
-  df <- fread(path) %>%
-    mutate(cellid = sub("_counts.*$", "", basename(path)),
+  df <- fread(path)
+  if(nrow(df) == 0){
+    df <- data.table(
+      Geneid = character(0), Length = integer(0), 
+      nonumi_count = 0, umi_count = 0
+    )
+  }
+  df %>% mutate(cellid = sub("_counts.*$", "", basename(path)),
            count = nonumi_count + umi_count)
 }) %>% bind_rows() %>%
   dplyr::select(Geneid, cellid, count) %>%   
