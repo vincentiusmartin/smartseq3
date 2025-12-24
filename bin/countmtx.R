@@ -12,13 +12,14 @@ countmat <- lapply(allpaths, function(path){
   df <- fread(path)
   if(nrow(df) == 0){
     df <- data.table(
-      Geneid = character(0), Length = integer(0), 
+      Geneid = NA_character_, Length = integer(0), 
       nonumi_count = 0, umi_count = 0
     )
   }
   df %>% mutate(cellid = sub("_counts.*$", "", basename(path)),
            count = nonumi_count + umi_count)
 }) %>% bind_rows() %>%
+  dplyr::filter(!is.na(Geneid)) %>%
   dplyr::select(Geneid, cellid, count) %>%   
   tidyr::pivot_wider(
     names_from = cellid,

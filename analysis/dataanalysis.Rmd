@@ -1,0 +1,67 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-12-23"
+---
+
+```{r}
+library(Seurat)
+library(Matrix)
+library(ggplot2)
+```
+
+
+```{r}
+# Paths
+counts_dir <- "/research/groups/northcgrp/home/common/Vincentius/smartseq3/testrun/counts"
+
+# Load data
+count_matrix <- readMM(file.path(counts_dir, "matrix.mtx"))
+barcodes <- readLines(file.path(counts_dir, "barcodes.tsv"))
+features <- readLines(file.path(counts_dir, "features.tsv"))
+
+rownames(count_matrix) <- features
+colnames(count_matrix) <- barcodes
+
+# Create Seurat object
+seurat <- CreateSeuratObject(counts = count_matrix, project = "smartseq3")
+
+# QC metrics
+seurat[["percent.mt"]] <- PercentageFeatureSet(seurat, pattern = "^MT-")
+seurat <- subset(seurat, subset = nFeature_RNA > 0 & nCount_RNA > 0 & !is.nan(seurat$percent.mt))
+Idents(seurat) <- seurat$orig.ident
+
+# Standard workflow
+seurat <- NormalizeData(seurat)
+seurat <- FindVariableFeatures(seurat)
+seurat <- ScaleData(seurat)
+seurat <- RunPCA(seurat)
+seurat <- RunUMAP(seurat, dims = 1:20)
+seurat <- FindNeighbors(seurat, dims = 1:20)
+seurat <- FindClusters(seurat)
+
+# Inspect results
+seurat
+```
+
+
+```{r}
+VlnPlot(seurat, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, group.by = NULL, combine=TRUE) &
+  geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA)
+
+
+FeatureScatter(seurat, feature1 = "nCount_RNA", feature2 = "percent.mt") 
+FeatureScatter(seurat, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+
+top10 <- head(VariableFeatures(seurat), 10)
+VariableFeaturePlot(seurat) + LabelPoints(plot = VariableFeaturePlot(seurat), points = top10, repel = TRUE)
+
+
+ElbowPlot(seurat)  # Determine number of PCs
+DimPlot(seurat, reduction = "pca")
+
+
+DimPlot(seurat, reduction = "umap", group.by = "seurat_clusters", label = TRUE) + ggtitle("UMAP Clusters")
+
+```
