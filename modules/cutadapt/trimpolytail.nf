@@ -12,7 +12,7 @@ process TRIM_POLYTAIL {
   
   output:
   tuple val(meta), path("*_trimmed*.fastq.gz"), emit: reads
-  tuple val(meta), path("versions.yml"), emit: log
+  //tuple val(meta), path("versions.yml"), emit: log
   
   script:
   def prefix = task.ext.prefix ?: "${meta.id}"

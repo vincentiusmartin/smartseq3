@@ -1,7 +1,7 @@
 library(tidyverse)
 library(data.table)
 
-#datadir <- "/research/groups/northcgrp/projects/northcgrp_hartwell/common/illumina/northcgrp_864520_Amplicon_premade-1/3400601"
+datadir <- "/research/groups/northcgrp/projects/northcgrp_hartwell/common/illumina/northcgrp_864520_Amplicon_premade-1/"
 datadir <- "/home/vmartin/projects/pipeline/smartseq3/input"
 allfiles <- list.files(datadir, pattern = "\\.gz$", recursive=TRUE, full.names=TRUE)
 

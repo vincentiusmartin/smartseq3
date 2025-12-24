@@ -2,7 +2,7 @@
 process EXTRACT_UMI {
     tag "$meta.id"
     label 'process_med'
-    publishDir "${params.outdir}/umi_tools", mode: 'copy'
+    publishDir "${params.outdir}/umi_tools/extract", mode: 'copy'
     
     module 'seqkit/2.10.1'
     conda '/research/groups/northcgrp/home/common/Vincentius/envs/umitools'
@@ -13,7 +13,7 @@ process EXTRACT_UMI {
     output:
     tuple val(meta), path("*umi*.fastq.gz"), emit: reads
     tuple val(meta), path("*_umistats.csv"), emit: umistats
-    tuple val(meta), path("*.{log,yml}"), emit: log
+    tuple val(meta), path("*.log"), emit: log
 
     script:
     def prefix = task.ext.prefix ?: "${meta.id}"

@@ -2,7 +2,7 @@
 
 process ALIGN_READS {
   tag "$meta.id"
-  label 'process_med'
+  label 'process_high'
   publishDir "${params.outdir}/star", mode: 'copy'
   
   module 'star/2.7.11'
@@ -11,9 +11,10 @@ process ALIGN_READS {
   tuple val(meta), path(reads)
   
   output:
-  tuple val(meta), path("*.bam"), emit: reads
+  tuple val(meta), path("*.bam"), emit: bam
   tuple val(meta), path("*.tab"), emit: spjunc
-  tuple val(meta), path("*.{out,yml}"), emit: log
+  tuple val(meta), path("*.out"), emit: stats
+  //tuple val(meta), path("versions.yml"), emit: log
   
   script:
   def prefix = task.ext.prefix ?: "${meta.id}"
@@ -27,8 +28,8 @@ process ALIGN_READS {
   """
   for type in umi nonumi; do
     STAR \
-      --genomeDir $params.star_index_path \
-      --sjdbGTFfile $params.gtf_path \
+      --genomeDir ${params.star_index_path} \
+      --sjdbGTFfile ${params.gtf_path} \
       --readFilesIn ${prefix}_\${type}_trimmed.1.fastq.gz ${prefix}_\${type}_trimmed.2.fastq.gz \
       --readFilesCommand zcat \
       --outFilterMultimapNmax 10 \
@@ -41,9 +42,11 @@ process ALIGN_READS {
       --runThreadN $cores
   done 
   
+  rm -r *STARgenome
+  
   cat <<-END_VERSIONS > versions.yml
   "${task.process}":
-      star: \$(echo \$(umi_tools --version 2>&1) | sed 's/^.*version //; s/Last.*\$//')
+      star: \$(echo \$(star --version 2>&1) | sed 's/^.*version //; s/Last.*\$//')
   END_VERSIONS
   """
 }

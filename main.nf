@@ -12,9 +12,14 @@ nextflow.enable.dsl=2
     IMPORT MODULES/SUBWORKFLOWS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
+include { FASTQC } from './modules/fastqc/fastqc'
+include { MULTIQC } from './modules/fastqc/fastqc'
 include { EXTRACT_UMI } from './modules/umi_tools/extract'
+include { RECONSTRUCT_ISOFORMS } from './modules/umi_tools/isoform'
 include { TRIM_POLYTAIL } from './modules/cutadapt/trimpolytail'
 include { ALIGN_READS } from './modules/star/alignreads'
+include { ASSIGN_READS } from './modules/subread/assignreads'
+include { CREATE_COUNTMTX } from './modules/custom/countmtx'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -35,9 +40,21 @@ workflow {
     .map {meta, fastq -> [meta, fastq.flatten()] }
     .set { ch_fastq }
     
+  FASTQC(ch_fastq) | collect |  MULTIQC
+    
   EXTRACT_UMI(ch_fastq)
   TRIM_POLYTAIL(EXTRACT_UMI.out.reads)
   ALIGN_READS(TRIM_POLYTAIL.out.reads)
+  
+  ASSIGN_READS(ALIGN_READS.out.bam).set { assign_reads_ch }
+  RECONSTRUCT_ISOFORMS(assign_reads_ch.bam)
+  
+  assign_reads_ch.counts
+    .map { meta, counts -> counts }
+    .collect()
+    .set { ftcount_ch }
+
+  CREATE_COUNTMTX(ftcount_ch)
   
 }
 
