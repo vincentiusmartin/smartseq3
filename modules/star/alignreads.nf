@@ -18,6 +18,7 @@ process ALIGN_READS {
   
   script:
   def prefix = task.ext.prefix ?: "${meta.id}"
+  def umiblock = params.umi ? "umi nonumi" : "nonumi"
   def cores = 1
   if (task.cpus) {
       cores = (task.cpus as int) - 1
@@ -26,7 +27,7 @@ process ALIGN_READS {
   }
   
   """
-  for type in umi nonumi; do
+  for type in ${umiblock}; do
     STAR \
       --genomeDir ${params.star_index_path} \
       --sjdbGTFfile ${params.gtf_path} \

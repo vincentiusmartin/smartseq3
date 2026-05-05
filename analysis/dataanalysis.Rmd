@@ -8,8 +8,12 @@ date: "2025-12-23"
 library(Seurat)
 library(Matrix)
 library(ggplot2)
+library(tidyverse)
+library(data.table)
+library(patchwork)
 ```
 
+# Data processing
 
 ```{r}
 # Paths
@@ -19,49 +23,207 @@ counts_dir <- "/research/groups/northcgrp/home/common/Vincentius/smartseq3/testr
 count_matrix <- readMM(file.path(counts_dir, "matrix.mtx"))
 barcodes <- readLines(file.path(counts_dir, "barcodes.tsv"))
 features <- readLines(file.path(counts_dir, "features.tsv"))
-
 rownames(count_matrix) <- features
 colnames(count_matrix) <- barcodes
 
 # Create Seurat object
-seurat <- CreateSeuratObject(counts = count_matrix, project = "smartseq3")
-
-# QC metrics
+seurat <- CreateSeuratObject(counts = count_matrix, project = "smartseq2")
 seurat[["percent.mt"]] <- PercentageFeatureSet(seurat, pattern = "^MT-")
 seurat <- subset(seurat, subset = nFeature_RNA > 0 & nCount_RNA > 0 & !is.nan(seurat$percent.mt))
 Idents(seurat) <- seurat$orig.ident
+seurat <- subset(seurat, features = rownames(seurat)[!grepl("^ENSG", rownames(seurat))])
+```
 
-# Standard workflow
+```{r}
+stardir <- "/research/groups/northcgrp/home/common/Vincentius/smartseq3/testrun/star"
+logfiles <- list.files(stardir, pattern = "Log.final.out$", full.names = TRUE)
+mapping_df <- lapply(logfiles, function(f) {
+  type <- ifelse(grepl("_umiLog", f), "umi", "nonumi")
+  cellid <- sub("_(umi|nonumi)Log.*$", "", basename(f))
+  lines <- readLines(f)
+  rate <- as.numeric(gsub("%", "", trimws(sub(".*\\|", "", lines[grep("Uniquely mapped reads %", lines)]))))
+  nread <- as.numeric(gsub("%", "", trimws(sub(".*\\|", "", lines[grep("Number of input reads", lines)]))))
+  data.frame(cellid = cellid, mappingrate = rate, nreads=nread, type=type)
+}) %>% bind_rows() %>%
+  pivot_wider( id_cols = cellid, names_from = type, values_from = c(mappingrate, nreads) ) %>%
+  column_to_rownames("cellid") %>%
+  rename_with(~ gsub("_nonumi", "", .x))
+  #mutate(percent.umi = 100*nreads_umi/(nreads_umi + nreads_nonumi))
+seurat <- AddMetaData(seurat, mapping_df)
+```
+
+# Initial data visualization
+
+```{r}
+Seurat::VlnPlot(
+  seurat, features = c("mappingrate", "nreads",
+               "nFeature_RNA", "nCount_RNA", "percent.mt"),
+  ncol = 4, combine = FALSE
+) %>%
+  lapply(\(p) p +
+    geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
+    theme(
+      plot.title = element_text(size = 12),
+      axis.text.x = element_blank(),
+      axis.title.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.title.y = element_blank(),
+      legend.position = "none", aspect.ratio=1
+    )
+  ) %>%
+  patchwork::wrap_plots(ncol = 2)
+```
+
+
+```{r}
+seurat <- subset(seurat, subset = nFeature_RNA > 500 & nreads > 100000)
+p1 <- FeatureScatter(seurat, feature1 = "nCount_RNA", feature2 = "percent.mt") 
+p2 <- FeatureScatter(seurat, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+(p1 + p2) + theme(legend.position = "none",  axis.title = element_text(size = 12),
+                  axis.text = element_text(size = 10), aspect.ratio = 1)
+```
+
+```{r}
 seurat <- NormalizeData(seurat)
 seurat <- FindVariableFeatures(seurat)
+topn <- head(VariableFeatures(seurat),50)
+LabelPoints(plot = VariableFeaturePlot(seurat), points = topn, repel = TRUE) 
+```
+
+# Clustering
+
+```{r}
 seurat <- ScaleData(seurat)
 seurat <- RunPCA(seurat)
 seurat <- RunUMAP(seurat, dims = 1:20)
 seurat <- FindNeighbors(seurat, dims = 1:20)
 seurat <- FindClusters(seurat)
+```
 
-# Inspect results
-seurat
+```{r}
+ElbowPlot(seurat) 
+```
+
+```{r}
+print(seurat[["pca"]], dims = 1:5, nfeatures = 5)
+VizDimLoadings(seurat, dims = 1:2, reduction = "pca")
 ```
 
 
 ```{r}
-VlnPlot(seurat, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, group.by = NULL, combine=TRUE) &
-  geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA)
+DimPlot(seurat, reduction = "pca", group.by = "seurat_clusters", pt.size = 1) + 
+  theme(aspect.ratio = 1, legend.position = "none", 
+        axis.title = element_text(size = 9), axis.text = element_text(size = 9)) +
+  ggtitle(NULL)
+```
+
+```{r}
+FeaturePlot(
+  seurat, features = c("nCount_RNA"),
+  reduction = "pca",  ncol = 3
+) 
+```
+
+# Highly expressed genes
+
+```{r}
+all_markers <- FindAllMarkers(seurat, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+all_markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+```
+
+```{r,fig.width=12}
+# ACTB housekeeping
+markers <- c("ACTB", "CDK4","MYC","OTX2","XACT","CCNB1","CDK4")
+FeaturePlot(seurat, features = markers, ncol = 3,
+            min.cutoff = "q05", max.cutoff="q90", reduction="pca")
+```
+
+```{r}
+expr_mat <- GetAssayData(seurat, slot = "data")  # log-normalized data
+expr_fraction <- rowSums(expr_mat > 0) / ncol(seurat)
+gene_means <- rowMeans(expr_mat)
+gene_stats <- data.frame(
+  gene = rownames(seurat),
+  mean_expr = gene_means,
+  frac_cells = expr_fraction
+)
+topgenes <- gene_stats %>% arrange(desc(mean_expr)) %>% head(100)
+```
+
+```{r}
+library(clusterProfiler)
+library(org.Hs.eg.db)
+
+ego <- enrichGO(topgenes$gene, OrgDb=org.Hs.eg.db, keyType="SYMBOL", 
+                  ont="BP", pvalueCutoff = 0.05)
+barplot(ego, showCategory = 15)
+```
 
 
-FeatureScatter(seurat, feature1 = "nCount_RNA", feature2 = "percent.mt") 
-FeatureScatter(seurat, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+```{r}
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
 
+# Score cells
+seurat <- CellCycleScoring(
+  seurat,
+  s.features = s.genes,
+  g2m.features = g2m.genes,
+  set.ident = TRUE
+)
 
-top10 <- head(VariableFeatures(seurat), 10)
-VariableFeaturePlot(seurat) + LabelPoints(plot = VariableFeaturePlot(seurat), points = top10, repel = TRUE)
+# Add phase to metadata
+table(seurat$Phase)
 
+# Plot UMAP colored by cell cycle phase
+DimPlot(seurat, reduction = "pca", group.by = "Phase") + 
+  theme(axis.text = element_text(size=7), axis.title=element_text(size=8), aspect.ratio=1)
+```
 
-ElbowPlot(seurat)  # Determine number of PCs
-DimPlot(seurat, reduction = "pca")
+# Check with bulk data
 
+```{r}
+genemap <- fread("/research/groups/northcgrp/home/common/Vincentius/resources/genemap.tsv") %>%
+  dplyr::select(ensembl_gene_id, hgnc_symbol)
+bulkpath <- "/research/groups/northcgrp/home/common/OrganizedData/tmp_SJMB12/RNA/BulkRNA/Processed/STAR_GeneCounts/SJBT033384_D1ReadsPerGene.out.tab"
+bulkdf <- fread(bulkpath, skip = 4) %>% dplyr::select(V1, V2) %>% dplyr::rename(ensembl_gene_id=V1, bulk=V2) %>%
+  inner_join(genemap, by="ensembl_gene_id") %>% distinct(hgnc_symbol, bulk)
 
-DimPlot(seurat, reduction = "umap", group.by = "seurat_clusters", label = TRUE) + ggtitle("UMAP Clusters")
+scpbcounts <- Matrix::rowSums(GetAssayData(seurat, layer = "counts"))
+mergedcount <- data.frame(hgnc_symbol = rownames(seurat), scpseudobulk = scpbcounts) %>% 
+  inner_join(bulkdf, by="hgnc_symbol") %>%
+  mutate(
+    scpseudobulk = log1p(scpseudobulk / sum(scpseudobulk) * 1e6),
+    bulk       = log1p(bulk / sum(bulk) * 1e6)
+  )
 
 ```
+
+```{r}
+shhmarkers <- c("GLI2", "PTCH1", "GAB1", "ATOH1", "MYCN", "HHIP", "TERT", "XACT")
+cortext <- paste0("R = ", round(cor(mergedcount$bulk, mergedcount$scpseudobulk, method = "pearson"), 2))
+ggplot(mergedcount, aes(x = bulk, y = scpseudobulk)) +
+  geom_point(alpha = 0.3, size = 1) +  # background genes
+  geom_point(data = subset(mergedcount, hgnc_symbol %in% shhmarkers),
+             aes(x = bulk, y = scpseudobulk),
+             color = "red", size = 3) +    # SHH markers
+  ggrepel::geom_text_repel(data = subset(mergedcount, hgnc_symbol %in% shhmarkers),
+                  aes(label = hgnc_symbol),
+                  color = "red", size = 3, fontface = "bold", max.overlaps=100) +
+  geom_smooth(method = "lm", col = "blue", se = FALSE) +
+  annotate("text", x = max(mergedcount$bulk), y = 7,
+           label = cortext, hjust = 1, vjust = 0, size = 4, color = "blue") +
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0)) +
+  theme_classic() +
+  xlab("Bulk RNA-seq") +
+  ylab("Pseudo-bulked single cell") +
+  labs(title="log(CPM) correlation bulk vs single cell") +
+  theme(aspect.ratio=1)
+```
+
+```{r}
+# droplet qc r
+
+```
+

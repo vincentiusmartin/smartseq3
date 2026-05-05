@@ -54,21 +54,19 @@ process ASSIGN_READS {
   
       awk 'BEGIN{OFS="\t"}
       NR==2{
-          genecol=1
-          lengthcol=6
+          print "Geneid","Length","nonumi_count","umi_count"
           nonumi=0
           umi=0
           for(i=7;i<=NF;i++){
-              if(\$i ~ /nonumiAligned/){ nonumi=i }
-              if(\$i ~ /umiAligned/){ umi=i }
+              if (\$i ~ /_nonumiAligned/) nonumi=i
+              if (\$i ~ /_umiAligned/) umi=i
           }
-          print "Geneid","Length","nonumi_count","umi_count"
           next
       }
       NR>2{
           nonumi_val = (nonumi>0 ? \$nonumi : 0)
           umi_val    = (umi>0 ? \$umi : 0)
-          print \$genecol,\$lengthcol,nonumi_val,umi_val
+          print \$1,\$6,nonumi_val,umi_val
       }' ${prefix}_counts.txt > ${prefix}_counts.tmp \
       && mv ${prefix}_counts.tmp ${prefix}_counts.txt
         

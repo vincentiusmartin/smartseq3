@@ -16,8 +16,14 @@ process TRIM_POLYTAIL {
   
   script:
   def prefix = task.ext.prefix ?: "${meta.id}"
+  def umiblock = params.umi ? "umi nonumi" : "nonumi"
   """
-  for type in umi nonumi; do
+  if [ "${umiblock}" = "nonumi" ]; then
+    [ ! -f ${prefix}_nonumi.1.fastq.gz ] && ln -s ${reads[0]} ${prefix}_nonumi.1.fastq.gz 
+    [ ! -f ${prefix}_nonumi.2.fastq.gz ] && ln -s ${reads[1]} ${prefix}_nonumi.2.fastq.gz
+  fi
+  
+  for type in ${umiblock}; do
       cutadapt -g T{20} -G T{20} -a A{20} -A A{20} -a G{20} -A G{20} \
           --minimum-length 20 -j 8 \
           -o ${prefix}_\${type}_trimmed.1.fastq.gz \

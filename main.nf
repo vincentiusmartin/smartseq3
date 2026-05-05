@@ -12,6 +12,7 @@ nextflow.enable.dsl=2
     IMPORT MODULES/SUBWORKFLOWS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
+include { CAT_FASTQ } from './modules/cat/fastq'
 include { FASTQC } from './modules/fastqc/fastqc'
 include { MULTIQC } from './modules/fastqc/fastqc'
 include { EXTRACT_UMI } from './modules/umi_tools/extract'
@@ -31,23 +32,29 @@ workflow {
   Channel
     .fromPath(params.input)
     .splitCsv(header: true)
-    .map {
-      row ->
-        def fastq = row.findAll { it.key != 'sample' }
-        return [[id:row.sample], [fastq.values()]]
-    }
+    .map { row  -> [ [id: row.sample], [row.fastq1, row.fastq2 ] ] }
     .groupTuple(by: [0])
     .map {meta, fastq -> [meta, fastq.flatten()] }
+    .branch { meta, fastq ->
+      single: fastq.size() == 2
+      multiple: fastq.size() > 2
+    }
     .set { ch_fastq }
-    
-  FASTQC(ch_fastq) | collect |  MULTIQC
-    
-  EXTRACT_UMI(ch_fastq)
-  TRIM_POLYTAIL(EXTRACT_UMI.out.reads)
-  ALIGN_READS(TRIM_POLYTAIL.out.reads)
   
+  CAT_FASTQ(ch_fastq.multiple)
+    .mix(ch_fastq.single)
+    .set { ch_catfastq }
+    
+  FASTQC(ch_catfastq) | collect |  MULTIQC
+
+  ch_reads = params.umi ? EXTRACT_UMI(ch_catfastq).out.reads : ch_catfastq
+  TRIM_POLYTAIL(ch_reads)
+  ALIGN_READS(TRIM_POLYTAIL.out.reads)
   ASSIGN_READS(ALIGN_READS.out.bam).set { assign_reads_ch }
-  RECONSTRUCT_ISOFORMS(assign_reads_ch.bam)
+  
+  if (params.umi) {
+    RECONSTRUCT_ISOFORMS(assign_reads_ch.bam)
+  }
   
   assign_reads_ch.counts
     .map { meta, counts -> counts }
@@ -55,6 +62,5 @@ workflow {
     .set { ftcount_ch }
 
   CREATE_COUNTMTX(ftcount_ch)
-  
 }
 
