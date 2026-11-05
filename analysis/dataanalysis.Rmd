@@ -244,8 +244,3 @@ ggplot(mergedcount, aes(x = bulk, y = scpseudobulk)) +
   theme(aspect.ratio=1)
 ```
 
-```{r}
-# droplet qc r
-
-```
-
