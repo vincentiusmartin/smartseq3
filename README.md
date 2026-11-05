@@ -30,12 +30,12 @@ RNA seq.
 The pipeline accepts a samplesheet containing paths to the input files. An example samplesheet is shown below. 
 An example script for generating the samplesheet is provided in `createsamplesheet.R`.
 
-| sample | fastq1 | fastq2 | index1 | 
-| --- | --- | --- | --- | 
-| sample1 | /path/to/sample1_L001_R1.fastq.gz | /path/to/sample1_L001_R2.fastq.gz | /path/to/sample1_L001_I1.fastq.gz | 
-| sample1 | /path/to/sample1_L002_R1.fastq.gz | /path/to/sample1_L002_R2.fastq.gz | /path/to/sample1_L002_I1.fastq.gz | 
-| sample2 | /path/to/sample2_L001_R1.fastq.gz | /path/to/sample2_L001_R2.fastq.gz | /path/to/sample2_L001_I1.fastq.gz | 
-| sample2 | /path/to/sample2_L002_R1.fastq.gz | /path/to/sample2_L002_R2.fastq.gz | /path/to/sample2_L002_I1.fastq.gz | 
+| sample | fastq1 | fastq2 |
+| --- | --- | --- |
+| cell1 | /path/to/cell1_L001_R1.fastq.gz | /path/to/cell1_L001_R2.fastq.gz |
+| cell1 | /path/to/cell1_L002_R1.fastq.gz | /path/to/cell1_L002_R2.fastq.gz |
+| cell2 | /path/to/cell2_L001_R1.fastq.gz | /path/to/cell2_L001_R2.fastq.gz |
+| cell2 | /path/to/cell2_L002_R1.fastq.gz | /path/to/cell2_L002_R2.fastq.gz |
 
 
 ### Step-2: Running Smart-seq pipeline <a name="step2"></a>
