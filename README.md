@@ -29,6 +29,7 @@ RNA seq.
 
 The pipeline accepts a samplesheet containing paths to the input files. An example samplesheet is shown below. 
 An example script for generating the samplesheet is provided in `createsamplesheet.R`.
+As this is a plate-based assay, each line containing path to a cell fastq file.
 
 | sample | fastq1 | fastq2 |
 | --- | --- | --- |
